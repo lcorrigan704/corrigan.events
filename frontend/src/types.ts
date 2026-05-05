@@ -1,0 +1,87 @@
+export type DrawItem = {
+  id: number;
+  name: string;
+  code: string;
+  group_name: string | null;
+  seed_label: string | null;
+  primary_color: string;
+  secondary_color: string;
+  status: string;
+  placement: number | null;
+};
+
+export type GroupStanding = {
+  team_code: string;
+  group_name: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+  rank: number | null;
+  is_final: boolean;
+};
+
+export type KnockoutMatch = {
+  match_no: number;
+  round_name: string;
+  home_placeholder: string;
+  away_placeholder: string;
+  venue: string | null;
+  home_code: string | null;
+  away_code: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  winner_code: string | null;
+  status: string;
+};
+
+export type Slot = {
+  id: number;
+  name: string;
+  email: string | null;
+  paid: boolean;
+  assigned_item: DrawItem | null;
+};
+
+export type PayoutCategory = "champion" | "runner_up" | "third_place" | "most_goals_scored" | "last_place";
+
+export type Payout = {
+  category: PayoutCategory;
+  label: string;
+  percentage: number;
+  amount_pence: number;
+  outcome_status: "pending" | "provisional" | "final";
+  winning_item: DrawItem | null;
+  winning_slot: { id: number; name: string; email: string | null } | null;
+};
+
+export type Sweepstake = {
+  id: number;
+  title: string;
+  template_type: "world_cup_2026";
+  buy_in_pence: number;
+  currency: "GBP";
+  view_code: string;
+  reveal_at: string;
+  draw_status: string;
+  is_revealed: boolean;
+  pot_pence: number;
+  share_url: string;
+  slots: Slot[];
+  items: DrawItem[];
+  payouts: Payout[];
+  standings: GroupStanding[];
+  knockout_matches: KnockoutMatch[];
+  sports_provider_status: string;
+};
+
+export type CreatedSweepstake = {
+  admin_url: string;
+  view_code: string;
+  share_url: string;
+  sweepstake: Sweepstake;
+};

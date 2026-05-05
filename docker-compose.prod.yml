@@ -1,0 +1,52 @@
+services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: sqlite:////data/sweepstakes.db
+      PUBLIC_BASE_URL: https://sweepstakes.corrigan.events
+      CORS_ORIGINS: https://sweepstakes.corrigan.events,https://ss.corrigan.events
+      APP_ENV: production
+      WC2026_API_URL: ${WC2026_API_URL:-https://api.football-data.org/v4}
+      WC2026_COMPETITION_CODE: ${WC2026_COMPETITION_CODE:-WC}
+      WC2026_SEASON: ${WC2026_SEASON:-2026}
+      WC2026_RATE_LIMIT_PER_MINUTE: ${WC2026_RATE_LIMIT_PER_MINUTE:-9}
+    restart: unless-stopped
+    volumes:
+      - sweepstakes_data:/data
+
+  worker:
+    build:
+      context: ./backend
+    command: python -m app.worker
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: sqlite:////data/sweepstakes.db
+      PUBLIC_BASE_URL: https://sweepstakes.corrigan.events
+      APP_ENV: production
+      WC2026_API_URL: ${WC2026_API_URL:-https://api.football-data.org/v4}
+      WC2026_COMPETITION_CODE: ${WC2026_COMPETITION_CODE:-WC}
+      WC2026_SEASON: ${WC2026_SEASON:-2026}
+      WC2026_RATE_LIMIT_PER_MINUTE: ${WC2026_RATE_LIMIT_PER_MINUTE:-9}
+    restart: unless-stopped
+    volumes:
+      - sweepstakes_data:/data
+    depends_on:
+      - api
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - api
+
+volumes:
+  sweepstakes_data:

@@ -1,0 +1,56 @@
+services:
+  api:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: sqlite:////data/sweepstakes.db
+      PUBLIC_BASE_URL: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8000
+      APP_ENV: development
+      WC2026_API_KEY: ${WC2026_API_KEY:-}
+      WC2026_API_URL: ${WC2026_API_URL:-https://api.football-data.org/v4}
+      WC2026_COMPETITION_CODE: ${WC2026_COMPETITION_CODE:-WC}
+      WC2026_SEASON: ${WC2026_SEASON:-2026}
+      WC2026_RATE_LIMIT_PER_MINUTE: ${WC2026_RATE_LIMIT_PER_MINUTE:-9}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Sweepstakes <noreply@corrigan.events>}
+    ports:
+      - "8000:8000"
+    volumes:
+      - sweepstakes_data:/data
+
+  worker:
+    build:
+      context: ./backend
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: sqlite:////data/sweepstakes.db
+      PUBLIC_BASE_URL: http://localhost:5173
+      APP_ENV: development
+      WC2026_API_KEY: ${WC2026_API_KEY:-}
+      WC2026_API_URL: ${WC2026_API_URL:-https://api.football-data.org/v4}
+      WC2026_COMPETITION_CODE: ${WC2026_COMPETITION_CODE:-WC}
+      WC2026_SEASON: ${WC2026_SEASON:-2026}
+      WC2026_RATE_LIMIT_PER_MINUTE: ${WC2026_RATE_LIMIT_PER_MINUTE:-9}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Sweepstakes <noreply@corrigan.events>}
+    volumes:
+      - sweepstakes_data:/data
+    depends_on:
+      - api
+
+  frontend:
+    image: node:22-slim
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      VITE_API_BASE_URL: ""
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - api
+
+volumes:
+  sweepstakes_data:
