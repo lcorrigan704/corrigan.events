@@ -245,6 +245,53 @@ def recover_admin_links(db: Session, email: str) -> list[dict[str, str]]:
     return recovered_links
 
 
+def portal_sweepstakes(db: Session) -> list[dict[str, str | int | datetime | None]]:
+    settings = get_settings()
+    sweepstakes = (
+        db.query(Sweepstake)
+        .options(selectinload(Sweepstake.slots))
+        .order_by(Sweepstake.created_at.desc())
+        .all()
+    )
+
+    rows: list[dict[str, str | int | datetime | None]] = []
+    for sweepstake in sweepstakes:
+        named_slot_count = sum(1 for slot in sweepstake.slots if slot.name.strip())
+        slot_count = len(sweepstake.slots)
+        rows.append(
+            {
+                "id": sweepstake.id,
+                "title": sweepstake.title,
+                "organiser_email": sweepstake.organiser_email,
+                "view_code": sweepstake.view_code,
+                "participant_url": f"{settings.public_base_url}/s/{sweepstake.view_code}",
+                "admin_url": None,
+                "draw_status": sweepstake.draw_status.value,
+                "reveal_at": sweepstake.reveal_at,
+                "created_at": sweepstake.created_at,
+                "slot_count": slot_count,
+                "named_slot_count": named_slot_count,
+                "pot_pence": sum(1 for slot in sweepstake.slots if slot.paid) * sweepstake.buy_in_pence,
+            }
+        )
+    return rows
+
+
+def portal_generate_admin_link(db: Session, sweepstake_id: int) -> str:
+    settings = get_settings()
+    sweepstake = get_sweepstake(db, sweepstake_id)
+    token = generate_admin_token()
+    sweepstake.admin_token_hash = hash_token(token)
+    db.commit()
+    return f"{settings.public_base_url}/admin/{token}"
+
+
+def portal_delete_sweepstake(db: Session, sweepstake_id: int) -> None:
+    sweepstake = get_sweepstake(db, sweepstake_id)
+    db.delete(sweepstake)
+    db.commit()
+
+
 def expand_participant_slots(payload: SweepstakeCreate) -> list[SlotCreate]:
     if payload.participants:
         slots: list[SlotCreate] = []

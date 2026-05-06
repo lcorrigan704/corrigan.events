@@ -232,3 +232,22 @@ class SweepstakeCreated(BaseModel):
     view_code: str
     share_url: str
     sweepstake: SweepstakeRead
+
+
+class PortalSweepstakeRead(BaseModel):
+    id: int
+    title: str
+    organiser_email: str | None
+    view_code: str
+    participant_url: str
+    admin_url: str | None = None
+    draw_status: str
+    reveal_at: datetime
+    created_at: datetime
+    slot_count: int
+    named_slot_count: int
+    pot_pence: int
+
+
+class PortalAdminLinkRead(BaseModel):
+    admin_url: str

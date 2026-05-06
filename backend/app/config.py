@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     wc2026_competition_code: str = "WC"
     wc2026_season: int = 2026
     wc2026_rate_limit_per_minute: int = 9
+    portal_token: str | None = None
     resend_api_key: str | None = None
     resend_from_email: str = "Sweepstakes <noreply@corrigan.events>"
 

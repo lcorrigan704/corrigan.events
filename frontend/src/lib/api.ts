@@ -1,6 +1,8 @@
-import type { CreatedSweepstake, Sweepstake } from "../types";
+import type { CreatedSweepstake, PortalSweepstake, Sweepstake } from "../types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const PARTICIPANT_CODE_CACHE_MS = 2_000;
+const participantCodeRequests = new Map<string, { startedAt: number; promise: Promise<Sweepstake> }>();
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -28,7 +30,22 @@ export function createSweepstake(payload: unknown) {
 }
 
 export function getByCode(code: string) {
-  return request<Sweepstake>(`/api/sweepstakes/code/${code.trim().toUpperCase()}`);
+  const normalizedCode = code.trim().toUpperCase();
+  const existing = participantCodeRequests.get(normalizedCode);
+  const now = Date.now();
+  if (existing && now - existing.startedAt < PARTICIPANT_CODE_CACHE_MS) {
+    return existing.promise;
+  }
+
+  const promise = request<Sweepstake>(`/api/sweepstakes/code/${normalizedCode}`).finally(() => {
+    window.setTimeout(() => {
+      if (participantCodeRequests.get(normalizedCode)?.promise === promise) {
+        participantCodeRequests.delete(normalizedCode);
+      }
+    }, PARTICIPANT_CODE_CACHE_MS);
+  });
+  participantCodeRequests.set(normalizedCode, { startedAt: now, promise });
+  return promise;
 }
 
 export function getAdmin(token: string) {
@@ -70,5 +87,25 @@ export function requestAdminLinks(email: string) {
   return request<AdminLinkRecovery>("/api/admin/forgot-link", {
     method: "POST",
     body: JSON.stringify({ email })
+  });
+}
+
+export function getPortalSweepstakes(token: string) {
+  return request<PortalSweepstake[]>("/api/portal/sweepstakes", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+export function generatePortalAdminLink(token: string, sweepstakeId: number) {
+  return request<{ admin_url: string }>(`/api/portal/sweepstakes/${sweepstakeId}/admin-link`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+export function deletePortalSweepstake(token: string, sweepstakeId: number) {
+  return request<{ message: string }>(`/api/portal/sweepstakes/${sweepstakeId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` }
   });
 }

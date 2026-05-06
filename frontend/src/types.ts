@@ -85,3 +85,18 @@ export type CreatedSweepstake = {
   share_url: string;
   sweepstake: Sweepstake;
 };
+
+export type PortalSweepstake = {
+  id: number;
+  title: string;
+  organiser_email: string | null;
+  view_code: string;
+  participant_url: string;
+  admin_url: string | null;
+  draw_status: string;
+  reveal_at: string;
+  created_at: string;
+  slot_count: number;
+  named_slot_count: number;
+  pot_pence: number;
+};

@@ -9,6 +9,7 @@ import { CodeEntry } from "./components/CodeEntry";
 import { CreateSweepstake } from "./components/CreateSweepstake";
 import { DrawReplay } from "./components/DrawReplay";
 import { KnockoutBracket } from "./components/KnockoutBracket";
+import { PortalView } from "./components/PortalView";
 import { SummaryStrip } from "./components/SummaryStrip";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -16,7 +17,6 @@ import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 
 const REVEAL_PREP_DURATION_MS = 7_000;
-const REVEAL_REFRESH_BUFFER_MS = 500;
 const REVEAL_REPLAY_GRACE_MS = 5 * 60_000;
 
 function codeFromPath() {
@@ -27,6 +27,15 @@ function codeFromPath() {
 function adminTokenFromPath() {
   const match = window.location.pathname.match(/\/admin\/([^/]+)$/);
   return match?.[1] ?? "";
+}
+
+function portalTokenFromPath() {
+  const match = window.location.pathname.match(/\/portal\/([^/]+)$/);
+  return match?.[1] ?? "";
+}
+
+function isPortalPath() {
+  return window.location.pathname === "/portal" || Boolean(portalTokenFromPath());
 }
 
 function shouldSkipRevealReplay(sweepstake: Sweepstake) {
@@ -62,6 +71,7 @@ export default function App() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState<string | null>(null);
   const [forgotLinks, setForgotLinks] = useState<{ title: string; admin_url: string; view_code: string }[]>([]);
+  const isPortal = isPortalPath();
   const isAdmin = Boolean(adminTokenFromPath());
 
   useEffect(() => {
@@ -109,37 +119,6 @@ export default function App() {
     refreshParticipant();
   }, [participantCode, refreshParticipant]);
 
-  useEffect(() => {
-    if (!participantCode || !participant || participant.is_revealed) return;
-
-    const revealAt = new Date(participant.reveal_at).getTime();
-    const refreshAfterRevealPrep = revealAt + REVEAL_PREP_DURATION_MS + REVEAL_REFRESH_BUFFER_MS;
-    const unlockDelay = Math.max(0, refreshAfterRevealPrep - Date.now());
-    const unlockTimer = window.setTimeout(refreshParticipant, unlockDelay);
-    const refreshWhenNotPreparing = () => {
-      const currentTime = Date.now();
-      if (currentTime < revealAt || currentTime >= refreshAfterRevealPrep) {
-        refreshParticipant();
-      }
-    };
-    const interval = window.setInterval(refreshWhenNotPreparing, 60_000);
-    const refreshOnFocus = () => {
-      if (document.visibilityState !== "hidden" && Date.now() >= refreshAfterRevealPrep) {
-        refreshParticipant();
-      }
-    };
-
-    window.addEventListener("focus", refreshOnFocus);
-    document.addEventListener("visibilitychange", refreshOnFocus);
-
-    return () => {
-      window.clearTimeout(unlockTimer);
-      window.clearInterval(interval);
-      window.removeEventListener("focus", refreshOnFocus);
-      document.removeEventListener("visibilitychange", refreshOnFocus);
-    };
-  }, [participantCode, participant, refreshParticipant]);
-
   async function openCode(code: string) {
     setError(null);
     setParticipantLoading(true);
@@ -183,7 +162,9 @@ export default function App() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-6 px-4 py-6 md:px-8">
-        {isAdmin ? (
+        {isPortal ? (
+          <PortalView />
+        ) : isAdmin ? (
           <AdminView created={created} />
         ) : participantLoading ? (
           <div className="flex min-h-[calc(100vh-140px)] items-center justify-center">
