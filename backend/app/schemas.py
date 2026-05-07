@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 import re
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -225,6 +226,7 @@ class SweepstakeRead(BaseModel):
     standings: list[GroupStandingRead]
     knockout_matches: list[KnockoutMatchRead]
     sports_provider_status: str
+    audit_metadata: dict[str, Any] | None = None
 
 
 class SweepstakeCreated(BaseModel):

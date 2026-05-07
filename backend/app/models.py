@@ -70,6 +70,10 @@ class Sweepstake(Base):
     admin_token_hash: Mapped[str] = mapped_column(String(255), index=True)
     reveal_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     draw_status: Mapped[DrawStatus] = mapped_column(Enum(DrawStatus), default=DrawStatus.generated)
+    draw_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    draw_algorithm: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    assignment_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    audit_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

@@ -80,6 +80,7 @@ def test_hidden_before_reveal_and_admin_can_see_assignments():
     assert public.json()["is_revealed"] is False
     assert public.json()["draw_status"] == "draft"
     assert public.json()["items"] == []
+    assert public.json()["audit_metadata"] is None
     assert public.json()["slots"][0]["assigned_item"] is None
 
     token = created["admin_url"].rsplit("/", 1)[-1]
@@ -107,6 +108,37 @@ def test_revealed_public_view_includes_assignments_and_payouts():
     assert body["is_revealed"] is True
     assert len(body["items"]) == 48
     assert body["payouts"][0]["amount_pence"] == 16800
+    assert body["audit_metadata"]["audit_status"] == "verified"
+    assert body["audit_metadata"]["draw_algorithm"] == "python_seeded_shuffle_v1"
+    assert body["audit_metadata"]["draw_published_at"] is not None
+    assert body["audit_metadata"]["assignment_digest"]
+    assert "random_seed" not in body["audit_metadata"]
+    assert "organiser_email" not in body["audit_metadata"]
+    assert len(body["audit_metadata"]["assignments"]) == 48
+
+
+def test_publish_stores_stable_audit_digest():
+    response = client.post("/api/sweepstakes", json=payload(datetime.now(timezone.utc) - timedelta(minutes=1)))
+    assert response.status_code == 200
+    created = response.json()
+    token = created["admin_url"].rsplit("/", 1)[-1]
+
+    published = client.post("/api/admin/publish", headers={"Authorization": f"Bearer {token}"})
+    assert published.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        sweepstake = db.query(Sweepstake).filter(Sweepstake.view_code == created["view_code"]).one()
+        assert sweepstake.draw_published_at is not None
+        assert sweepstake.draw_algorithm == "python_seeded_shuffle_v1"
+        assert sweepstake.audit_version == 1
+        first_digest = sweepstake.assignment_digest
+        assert first_digest is not None
+    finally:
+        db.close()
+
+    public = client.get(f"/api/sweepstakes/code/{created['view_code']}")
+    assert public.json()["audit_metadata"]["assignment_digest"] == first_digest
 
 
 def test_participant_slot_counts_expand_to_paid_slots():

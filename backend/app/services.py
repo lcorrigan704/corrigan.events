@@ -1,3 +1,5 @@
+import hashlib
+import json
 import random
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -25,6 +27,8 @@ from app.security import generate_admin_token, generate_view_code, hash_token, i
 from app.templates import world_cup_items, world_cup_knockout_matches
 
 APP_TIMEZONE = ZoneInfo("Europe/London")
+DRAW_ALGORITHM = "python_seeded_shuffle_v1"
+AUDIT_VERSION = 1
 
 
 def normalize_reveal_at(reveal_at: datetime) -> datetime:
@@ -217,6 +221,10 @@ def publish_sweepstake(db: Session, sweepstake: Sweepstake) -> Sweepstake:
         raise ValueError(f"Exactly {len(sweepstake.items)} paid slots are required before publishing")
 
     assign_draw_items(paid_slots, list(sweepstake.items), seed=random_seed())
+    sweepstake.draw_published_at = datetime.now(APP_TIMEZONE).replace(tzinfo=None)
+    sweepstake.draw_algorithm = DRAW_ALGORITHM
+    sweepstake.assignment_digest = assignment_digest(sweepstake)
+    sweepstake.audit_version = AUDIT_VERSION
     sweepstake.draw_status = DrawStatus.generated
     db.commit()
     return get_sweepstake(db, sweepstake.id)
@@ -312,6 +320,60 @@ def assign_draw_items(slots: list[ParticipantSlot], items: list[DrawItem], seed:
     rng.shuffle(shuffled_items)
     for slot, item in zip(shuffled_slots, shuffled_items, strict=False):
         slot.draw_item_id = item.id
+
+
+def canonical_assignments(sweepstake: Sweepstake) -> list[dict[str, int | str | None]]:
+    items_by_id = {item.id: item for item in sweepstake.items}
+    return [
+        (
+            lambda item: {
+                "slot_position": slot.position + 1,
+                "participant_name": slot.name,
+                "team_code": item.code if item else None,
+                "team_name": item.name if item else None,
+                "group_name": item.group_name if item else None,
+            }
+        )(slot.draw_item or items_by_id.get(slot.draw_item_id))
+        for slot in sorted(sweepstake.slots, key=lambda candidate: candidate.position)
+        if slot.paid and slot.draw_item_id
+    ]
+
+
+def assignment_digest(sweepstake: Sweepstake) -> str:
+    payload = json.dumps(canonical_assignments(sweepstake), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def audit_metadata(sweepstake: Sweepstake, pot_pence: int) -> dict | None:
+    published = sweepstake.draw_status != DrawStatus.draft
+    revealed = published and is_revealed(sweepstake.reveal_at)
+    if not revealed:
+        return None
+
+    assignments = canonical_assignments(sweepstake)
+    stored_digest = sweepstake.assignment_digest
+    calculated_digest = assignment_digest(sweepstake) if assignments else None
+    audit_status = "verified" if stored_digest and stored_digest == calculated_digest and sweepstake.draw_published_at else "legacy_unverifiable"
+
+    return {
+        "audit_version": sweepstake.audit_version or AUDIT_VERSION,
+        "audit_status": audit_status,
+        "title": sweepstake.title,
+        "view_code": sweepstake.view_code,
+        "created_at": sweepstake.created_at,
+        "draw_scheduled_for": sweepstake.reveal_at,
+        "draw_published_at": sweepstake.draw_published_at,
+        "draw_results_time": sweepstake.reveal_at,
+        "results_visible_from": sweepstake.reveal_at,
+        "draw_algorithm": sweepstake.draw_algorithm or DRAW_ALGORITHM,
+        "assignment_digest": stored_digest or calculated_digest,
+        "slot_count": len([slot for slot in sweepstake.slots if slot.paid]),
+        "draw_item_count": len(sweepstake.items),
+        "currency": sweepstake.currency,
+        "buy_in_pence": sweepstake.buy_in_pence,
+        "pot_pence": pot_pence,
+        "assignments": assignments,
+    }
 
 
 def get_sweepstake(db: Session, sweepstake_id: int) -> Sweepstake:
@@ -521,4 +583,5 @@ def serialize_sweepstake(sweepstake: Sweepstake, include_hidden: bool = False) -
             for match in sweepstake.knockout_matches
         ] if visible else [],
         "sports_provider_status": snapshot.provider_status if snapshot else "not_configured",
+        "audit_metadata": audit_metadata(sweepstake, pot_pence),
     }

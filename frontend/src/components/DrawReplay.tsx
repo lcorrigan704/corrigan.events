@@ -12,6 +12,7 @@ const revealSteps = [
   { message: "Finalising standings", startProgress: 79, endProgress: 100, startTime: 5_550, endTime: 7_000 },
 ];
 const revealDuration = revealSteps[revealSteps.length - 1].endTime;
+const lockedMessages = ["Results are generated in", "Assignments are locked", "Waiting for the reveal"];
 
 function countdownParts(milliseconds: number) {
   const secondsRemaining = Math.max(0, Math.floor(milliseconds / 1000));
@@ -57,9 +58,17 @@ export function DrawReplay({ sweepstake, onRevealReady }: { sweepstake: Sweepsta
   const [now, setNow] = useState(Date.now());
   const [progress, setProgress] = useState(0);
   const [revealMessage, setRevealMessage] = useState(revealSteps[0].message);
+  const [lockedMessageIndex, setLockedMessageIndex] = useState(0);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setLockedMessageIndex((index) => (index + 1) % lockedMessages.length);
+    }, 3_000);
     return () => window.clearInterval(interval);
   }, []);
 
@@ -150,7 +159,29 @@ export function DrawReplay({ sweepstake, onRevealReady }: { sweepstake: Sweepsta
             </>
           ) : (
             <>
-              <h1 className="mt-5 text-3xl font-black tracking-normal sm:text-5xl">The reveal starts in</h1>
+              <div className="mt-5">
+                <Badge variant="secondary">{sweepstake.title}</Badge>
+              </div>
+              <h1 className="mt-5 min-h-[1.2em] text-3xl font-black tracking-normal sm:text-5xl">
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={lockedMessages[lockedMessageIndex]}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.22, ease: "easeOut" }}
+                    className="inline-block"
+                  >
+                    <ShimmeringText
+                      text={lockedMessages[lockedMessageIndex]}
+                      wave={false}
+                      duration={0.9}
+                      color="var(--foreground)"
+                      shimmeringColor="var(--muted-foreground)"
+                    />
+                  </motion.span>
+                </AnimatePresence>
+              </h1>
               <div className="mt-8">
                 {days > 0 && (
                   <div className="mb-3 text-sm font-medium uppercase text-muted-foreground">

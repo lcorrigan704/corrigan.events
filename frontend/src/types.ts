@@ -59,6 +59,32 @@ export type Payout = {
   winning_slot: { id: number; name: string; email: string | null } | null;
 };
 
+export type AuditMetadata = {
+  audit_version: number;
+  audit_status: string;
+  title: string;
+  view_code: string;
+  created_at: string;
+  draw_scheduled_for: string;
+  draw_published_at: string | null;
+  draw_results_time: string;
+  results_visible_from: string;
+  draw_algorithm: string;
+  assignment_digest: string | null;
+  slot_count: number;
+  draw_item_count: number;
+  currency: "GBP";
+  buy_in_pence: number;
+  pot_pence: number;
+  assignments: {
+    slot_position: number;
+    participant_name: string;
+    team_code: string | null;
+    team_name: string | null;
+    group_name: string | null;
+  }[];
+};
+
 export type Sweepstake = {
   id: number;
   title: string;
@@ -77,6 +103,7 @@ export type Sweepstake = {
   standings: GroupStanding[];
   knockout_matches: KnockoutMatch[];
   sports_provider_status: string;
+  audit_metadata: AuditMetadata | null;
 };
 
 export type CreatedSweepstake = {
