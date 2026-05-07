@@ -64,6 +64,7 @@ export default function App() {
   const [participantCode, setParticipantCode] = useState(codeFromPath());
   const [participantLoading, setParticipantLoading] = useState(Boolean(codeFromPath()));
   const [completedRevealCodes, setCompletedRevealCodes] = useState<Set<string>>(() => new Set());
+  const [replayRequestedCodes, setReplayRequestedCodes] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(window.location.pathname === "/create");
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -112,12 +113,39 @@ export default function App() {
       });
   }, [participantCode]);
 
+  const loadRevealedParticipant = useCallback(async () => {
+    if (!participantCode) return null;
+    try {
+      const nextParticipant = await getByCode(participantCode);
+      setParticipant(nextParticipant);
+      return nextParticipant;
+    } catch {
+      return null;
+    }
+  }, [participantCode]);
+
   const completeReveal = useCallback(() => {
     if (!participantCode) return;
     const normalizedCode = participantCode.toUpperCase();
     setCompletedRevealCodes((codes) => new Set(codes).add(normalizedCode));
+    setReplayRequestedCodes((codes) => {
+      const next = new Set(codes);
+      next.delete(normalizedCode);
+      return next;
+    });
     refreshParticipant();
   }, [participantCode, refreshParticipant]);
+
+  const replayDraw = useCallback(() => {
+    if (!participantCode) return;
+    const normalizedCode = participantCode.toUpperCase();
+    setReplayRequestedCodes((codes) => new Set(codes).add(normalizedCode));
+    setCompletedRevealCodes((codes) => {
+      const next = new Set(codes);
+      next.delete(normalizedCode);
+      return next;
+    });
+  }, [participantCode]);
 
   async function openCode(code: string) {
     setError(null);
@@ -180,7 +208,7 @@ export default function App() {
           <div className="min-w-0 space-y-5">
             {participant.is_revealed && completedRevealCodes.has(participant.view_code) ? (
               <>
-                <SummaryStrip sweepstake={participant} />
+                <SummaryStrip sweepstake={participant} onReplayDraw={replayDraw} />
                 <div className="grid w-full min-w-0 max-w-full items-start gap-5 xl:grid-cols-[minmax(390px,1.15fr)_minmax(0,2.85fr)]">
                   <div className="w-full min-w-0 max-w-full">
                     <AssignmentTable sweepstake={participant} />
@@ -191,7 +219,12 @@ export default function App() {
                 </div>
               </>
             ) : (
-              <DrawReplay sweepstake={participant} onRevealReady={completeReveal} />
+              <DrawReplay
+                sweepstake={participant}
+                onRevealReady={completeReveal}
+                onRevealUnlocked={loadRevealedParticipant}
+                startInReplay={replayRequestedCodes.has(participant.view_code)}
+              />
             )}
           </div>
         ) : showCreate ? (

@@ -107,7 +107,7 @@ export function AssignmentTable({ sweepstake, showAssignments = true }: { sweeps
       <CardHeader>
         <h2 className="text-lg font-bold">World Cup groups</h2>
         <p className="text-sm text-muted-foreground">
-          {showAssignments ? "Teams, colours, flags, and assigned participant slots." : "Teams, colours, flags, and group standings."}
+          {showAssignments ? "Teams standings & assigned participant slots." : "Teams standings."}
         </p>
       </CardHeader>
       <CardContent className="min-w-0 max-w-full px-3 sm:px-4">
