@@ -2,6 +2,7 @@ import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { flagForItem, homeKitForItem } from "../lib/teams";
+import { cn } from "../lib/utils";
 import type { CSSProperties } from "react";
 import type { DrawItem, KnockoutMatch, Slot, Sweepstake } from "../types";
 
@@ -32,6 +33,7 @@ function MatchTeamRow({
   winnerCode,
   itemsByCode,
   assignmentsByCode,
+  highlightedParticipantNames,
 }: {
   code: string | null;
   placeholder: string;
@@ -39,10 +41,12 @@ function MatchTeamRow({
   winnerCode: string | null;
   itemsByCode: Record<string, DrawItem>;
   assignmentsByCode: Record<string, Slot>;
+  highlightedParticipantNames: Set<string>;
 }) {
   const item = code ? itemsByCode[code] : null;
   const slot = code ? assignmentsByCode[code] : null;
   const isWinner = Boolean(code && winnerCode === code);
+  const highlighted = Boolean(slot && highlightedParticipantNames.has(slot.name));
   if (!item) {
     return (
       <div className="flex items-center justify-between gap-3 rounded-md border bg-background px-2 py-1.5 font-medium">
@@ -55,10 +59,11 @@ function MatchTeamRow({
   const kit = homeKitForItem(item);
   return (
     <div
-      className={[
+      className={cn(
         "flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-sm shadow-sm",
-        isWinner ? "ring-2 ring-primary/60" : "",
-      ].join(" ")}
+        isWinner && "ring-2 ring-primary/60",
+        highlighted && "border-emerald-500/70 ring-2 ring-emerald-500/70"
+      )}
       style={{
         "--team-primary": kit.primary,
         "--team-secondary": kit.secondary,
@@ -88,10 +93,12 @@ function MatchCard({
   match,
   itemsByCode,
   assignmentsByCode,
+  highlightedParticipantNames,
 }: {
   match: KnockoutMatch;
   itemsByCode: Record<string, DrawItem>;
   assignmentsByCode: Record<string, Slot>;
+  highlightedParticipantNames: Set<string>;
 }) {
   return (
     <div className="relative rounded-md border bg-card p-3 text-sm shadow-sm">
@@ -107,6 +114,7 @@ function MatchCard({
           winnerCode={match.winner_code}
           itemsByCode={itemsByCode}
           assignmentsByCode={assignmentsByCode}
+          highlightedParticipantNames={highlightedParticipantNames}
         />
         <MatchTeamRow
           code={match.away_code}
@@ -115,13 +123,14 @@ function MatchCard({
           winnerCode={match.winner_code}
           itemsByCode={itemsByCode}
           assignmentsByCode={assignmentsByCode}
+          highlightedParticipantNames={highlightedParticipantNames}
         />
       </div>
     </div>
   );
 }
 
-export function KnockoutBracket({ sweepstake }: { sweepstake: Sweepstake }) {
+export function KnockoutBracket({ sweepstake, highlightedParticipantNames = [] }: { sweepstake: Sweepstake; highlightedParticipantNames?: string[] }) {
   const itemsByCode = sweepstake.items.reduce<Record<string, DrawItem>>((acc, item) => {
     acc[item.code] = item;
     return acc;
@@ -138,6 +147,7 @@ export function KnockoutBracket({ sweepstake }: { sweepstake: Sweepstake }) {
       matches: sweepstake.knockout_matches.filter((match) => match.round_name === label),
     }))
     .filter((round) => round.matches.length > 0);
+  const highlightedNames = new Set(highlightedParticipantNames);
 
   return (
     <Card className="min-h-0 w-full min-w-0 max-w-full">
@@ -168,7 +178,13 @@ export function KnockoutBracket({ sweepstake }: { sweepstake: Sweepstake }) {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {round.matches.map((match) => (
-                    <MatchCard key={match.match_no} match={match} itemsByCode={itemsByCode} assignmentsByCode={assignmentsByCode} />
+                    <MatchCard
+                      key={match.match_no}
+                      match={match}
+                      itemsByCode={itemsByCode}
+                      assignmentsByCode={assignmentsByCode}
+                      highlightedParticipantNames={highlightedNames}
+                    />
                   ))}
                 </CardContent>
               </Card>
@@ -185,7 +201,13 @@ export function KnockoutBracket({ sweepstake }: { sweepstake: Sweepstake }) {
                 </div>
                 <div className="grid flex-1 content-around gap-2">
                   {round.matches.map((match) => (
-                    <MatchCard key={match.match_no} match={match} itemsByCode={itemsByCode} assignmentsByCode={assignmentsByCode} />
+                    <MatchCard
+                      key={match.match_no}
+                      match={match}
+                      itemsByCode={itemsByCode}
+                      assignmentsByCode={assignmentsByCode}
+                      highlightedParticipantNames={highlightedNames}
+                    />
                   ))}
                 </div>
               </section>

@@ -3,6 +3,7 @@ import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { flagForItem, homeKitForItem } from "../lib/teams";
+import { cn } from "../lib/utils";
 import type { DrawItem, GroupStanding, Slot, Sweepstake } from "../types";
 
 type TeamMarkStyle = CSSProperties & {
@@ -60,11 +61,23 @@ function sortGroupStandings(items: DrawItem[], standings: Record<string, GroupSt
   });
 }
 
-function TeamStandingRow({ item, slot, standing, showAssignments = true }: { item: DrawItem; slot: Slot | undefined; standing: ReturnType<typeof standingForItem>; showAssignments?: boolean }) {
+function TeamStandingRow({
+  item,
+  slot,
+  standing,
+  showAssignments = true,
+  highlighted = false,
+}: {
+  item: DrawItem;
+  slot: Slot | undefined;
+  standing: ReturnType<typeof standingForItem>;
+  showAssignments?: boolean;
+  highlighted?: boolean;
+}) {
   const kit = homeKitForItem(item);
 
   return (
-    <TableRow>
+    <TableRow className={cn(highlighted && "bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/70 hover:bg-emerald-500/15")}>
       <TableCell className="min-w-0 py-1.5 pr-1 whitespace-normal">
         <div className="flex min-w-0 items-center gap-2">
           <div
@@ -78,8 +91,14 @@ function TeamStandingRow({ item, slot, standing, showAssignments = true }: { ite
             <span>{flagForItem(item)}</span>
           </div>
           <div className="min-w-0 max-w-[108px] sm:max-w-[150px]">
-            <div className="line-clamp-1 text-xs font-semibold leading-tight">{item.name}</div>
-            {showAssignments && <div className="truncate text-[0.68rem] text-muted-foreground">{slot?.name ?? "Unassigned"}</div>}
+            <div title={item.name} className="line-clamp-1 text-xs font-semibold leading-tight">
+              {item.name}
+            </div>
+            {showAssignments && (
+              <div title={slot?.name ?? "Unassigned"} className="truncate text-[0.68rem] text-muted-foreground">
+                {slot?.name ?? "Unassigned"}
+              </div>
+            )}
           </div>
         </div>
       </TableCell>
@@ -93,9 +112,18 @@ function TeamStandingRow({ item, slot, standing, showAssignments = true }: { ite
   );
 }
 
-export function AssignmentTable({ sweepstake, showAssignments = true }: { sweepstake: Sweepstake; showAssignments?: boolean }) {
+export function AssignmentTable({
+  sweepstake,
+  showAssignments = true,
+  highlightedParticipantNames = [],
+}: {
+  sweepstake: Sweepstake;
+  showAssignments?: boolean;
+  highlightedParticipantNames?: string[];
+}) {
   const groupedItems = groupItems(sweepstake.items);
   const assignments = assignmentByItem(sweepstake.slots);
+  const highlightedNames = new Set(highlightedParticipantNames);
   const standings = sweepstake.standings.reduce<Record<string, GroupStanding>>((acc, standing) => {
     acc[standing.team_code] = standing;
     return acc;
@@ -139,6 +167,7 @@ export function AssignmentTable({ sweepstake, showAssignments = true }: { sweeps
                         slot={assignments[item.id]}
                         standing={standingForItem(item, standings)}
                         showAssignments={showAssignments}
+                        highlighted={Boolean(assignments[item.id] && highlightedNames.has(assignments[item.id].name))}
                       />
                     ))}
                   </TableBody>

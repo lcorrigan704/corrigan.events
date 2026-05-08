@@ -6,6 +6,7 @@ import type { CreatedSweepstake, PayoutCategory, Slot, Sweepstake } from "../typ
 import { corePayoutCategories, hasPayout, optionalPayoutCategories, payoutLabels, toggleOptionalPayout, updatePayoutPercentage } from "../lib/payouts";
 import { formatGBP, toPence } from "../lib/utils";
 import { AssignmentTable } from "./AssignmentTable";
+import { DrawReplay } from "./DrawReplay";
 import { KnockoutBracket } from "./KnockoutBracket";
 import { SummaryStrip } from "./SummaryStrip";
 import { Badge } from "./ui/badge";
@@ -18,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "./ui/sheet";
 
 const WORLD_CUP_ITEM_COUNT = 48;
+const HIGHLIGHT_STORAGE_PREFIX = "sweepstake-highlighted-participants:";
 
 type ParticipantRow = {
   id: string;
@@ -41,10 +43,6 @@ function participantPlaceholder(index: number) {
   return `Participant ${index + 1}`;
 }
 
-function isGeneratedParticipantName(name: string) {
-  return /^Participant \d+$/i.test(name.trim());
-}
-
 function defaultParticipants(): ParticipantRow[] {
   return Array.from({ length: WORLD_CUP_ITEM_COUNT }, () => ({
     id: createClientId(),
@@ -60,7 +58,7 @@ function participantsFromSlots(slots: Slot[]): ParticipantRow[] {
 
   const grouped = new Map<string, ParticipantRow>();
   for (const [index, slot] of slots.entries()) {
-    const slotName = isGeneratedParticipantName(slot.name) ? "" : slot.name;
+    const slotName = slot.name;
     const key = slotName.trim() ? slotName.trim().toLowerCase() : `empty-${index}`;
     const existing = grouped.get(key);
     if (existing) {
@@ -119,6 +117,9 @@ export function AdminView({ created }: { created?: CreatedSweepstake }) {
   const [sweepstake, setSweepstake] = useState<Sweepstake | null>(created?.sweepstake ?? null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [replayingDraw, setReplayingDraw] = useState(false);
+  const [highlightedParticipantNames, setHighlightedParticipantNames] = useState<string[]>([]);
+  const [highlightStorageCode, setHighlightStorageCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sweepstake && token) {
@@ -127,6 +128,31 @@ export function AdminView({ created }: { created?: CreatedSweepstake }) {
         .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load admin view"));
     }
   }, [sweepstake, token]);
+
+  useEffect(() => {
+    if (!sweepstake?.view_code) return;
+
+    const validNames = new Set(sweepstake.slots.filter((slot) => slot.paid && slot.name.trim()).map((slot) => slot.name));
+    const stored = window.localStorage.getItem(`${HIGHLIGHT_STORAGE_PREFIX}${sweepstake.view_code}`);
+    let parsed: unknown = [];
+    try {
+      parsed = stored ? JSON.parse(stored) : [];
+    } catch {
+      parsed = [];
+    }
+    const names = Array.isArray(parsed) ? parsed.filter((name): name is string => typeof name === "string" && validNames.has(name)) : [];
+
+    setHighlightedParticipantNames(Array.from(new Set(names)));
+    setHighlightStorageCode(sweepstake.view_code);
+  }, [sweepstake?.slots, sweepstake?.view_code]);
+
+  useEffect(() => {
+    if (!sweepstake?.view_code || highlightStorageCode !== sweepstake.view_code) return;
+
+    const validNames = new Set(sweepstake.slots.filter((slot) => slot.paid && slot.name.trim()).map((slot) => slot.name));
+    const names = highlightedParticipantNames.filter((name) => validNames.has(name));
+    window.localStorage.setItem(`${HIGHLIGHT_STORAGE_PREFIX}${sweepstake.view_code}`, JSON.stringify(names));
+  }, [highlightStorageCode, highlightedParticipantNames, sweepstake?.slots, sweepstake?.view_code]);
 
   if (error) return <div className="rounded-md border border-destructive bg-destructive/10 p-5 text-destructive">{error}</div>;
   if (!sweepstake) return <Card><CardContent className="p-5">Loading admin view...</CardContent></Card>;
@@ -162,19 +188,40 @@ export function AdminView({ created }: { created?: CreatedSweepstake }) {
         </CardContent>
       </Card>
 
-      <SummaryStrip sweepstake={sweepstake} />
+      <SummaryStrip
+        sweepstake={sweepstake}
+        onReplayDraw={sweepstake.is_revealed ? () => setReplayingDraw(true) : undefined}
+        highlightedParticipantNames={highlightedParticipantNames}
+        onHighlightedParticipantNamesChange={setHighlightedParticipantNames}
+      />
 
-      {sweepstake.draw_status === "draft" && (
-        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <DraftSettingsEditor token={token} sweepstake={sweepstake} onUpdate={setSweepstake} onError={setError} />
-          <DraftParticipantEditor token={token} sweepstake={sweepstake} onUpdate={setSweepstake} onError={setError} />
-        </div>
+      {replayingDraw ? (
+        <DrawReplay
+          sweepstake={sweepstake}
+          startInReplay
+          onRevealReady={() => setReplayingDraw(false)}
+          onRevealUnlocked={async () => sweepstake}
+        />
+      ) : (
+        <>
+
+          {sweepstake.draw_status === "draft" && (
+            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+              <DraftSettingsEditor token={token} sweepstake={sweepstake} onUpdate={setSweepstake} onError={setError} />
+              <DraftParticipantEditor token={token} sweepstake={sweepstake} onUpdate={setSweepstake} onError={setError} />
+            </div>
+          )}
+
+          <div className="grid w-full min-w-0 max-w-full items-start gap-5 xl:grid-cols-[minmax(390px,1.15fr)_minmax(0,2.85fr)]">
+            <AssignmentTable
+              sweepstake={sweepstake}
+              showAssignments={sweepstake.is_revealed}
+              highlightedParticipantNames={highlightedParticipantNames}
+            />
+            <KnockoutBracket sweepstake={sweepstake} highlightedParticipantNames={highlightedParticipantNames} />
+          </div>
+        </>
       )}
-
-      <div className="grid w-full min-w-0 max-w-full items-start gap-5 xl:grid-cols-[minmax(390px,1.15fr)_minmax(0,2.85fr)]">
-        <AssignmentTable sweepstake={sweepstake} showAssignments={sweepstake.is_revealed} />
-        <KnockoutBracket sweepstake={sweepstake} />
-      </div>
     </div>
   );
 }

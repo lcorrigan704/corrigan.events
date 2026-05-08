@@ -18,6 +18,7 @@ import { Input } from "./components/ui/input";
 
 const REVEAL_PREP_DURATION_MS = 7_000;
 const REVEAL_REPLAY_GRACE_MS = 5 * 60_000;
+const HIGHLIGHT_STORAGE_PREFIX = "sweepstake-highlighted-participants:";
 
 function codeFromPath() {
   const match = window.location.pathname.match(/\/s\/([0-9]{6})/);
@@ -65,6 +66,8 @@ export default function App() {
   const [participantLoading, setParticipantLoading] = useState(Boolean(codeFromPath()));
   const [completedRevealCodes, setCompletedRevealCodes] = useState<Set<string>>(() => new Set());
   const [replayRequestedCodes, setReplayRequestedCodes] = useState<Set<string>>(() => new Set());
+  const [highlightedParticipantNames, setHighlightedParticipantNames] = useState<string[]>([]);
+  const [highlightStorageCode, setHighlightStorageCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(window.location.pathname === "/create");
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -147,6 +150,31 @@ export default function App() {
     });
   }, [participantCode]);
 
+  useEffect(() => {
+    if (!participant?.view_code) return;
+
+    const validNames = new Set(participant.slots.filter((slot) => slot.paid && slot.name.trim()).map((slot) => slot.name));
+    const stored = window.localStorage.getItem(`${HIGHLIGHT_STORAGE_PREFIX}${participant.view_code}`);
+    let parsed: unknown = [];
+    try {
+      parsed = stored ? JSON.parse(stored) : [];
+    } catch {
+      parsed = [];
+    }
+    const names = Array.isArray(parsed) ? parsed.filter((name): name is string => typeof name === "string" && validNames.has(name)) : [];
+
+    setHighlightedParticipantNames(Array.from(new Set(names)));
+    setHighlightStorageCode(participant.view_code);
+  }, [participant?.view_code, participant?.slots]);
+
+  useEffect(() => {
+    if (!participant?.view_code || highlightStorageCode !== participant.view_code) return;
+
+    const validNames = new Set(participant.slots.filter((slot) => slot.paid && slot.name.trim()).map((slot) => slot.name));
+    const names = highlightedParticipantNames.filter((name) => validNames.has(name));
+    window.localStorage.setItem(`${HIGHLIGHT_STORAGE_PREFIX}${participant.view_code}`, JSON.stringify(names));
+  }, [highlightStorageCode, highlightedParticipantNames, participant?.slots, participant?.view_code]);
+
   async function openCode(code: string) {
     setError(null);
     setParticipantLoading(true);
@@ -208,13 +236,18 @@ export default function App() {
           <div className="min-w-0 space-y-5">
             {participant.is_revealed && completedRevealCodes.has(participant.view_code) ? (
               <>
-                <SummaryStrip sweepstake={participant} onReplayDraw={replayDraw} />
+                <SummaryStrip
+                  sweepstake={participant}
+                  onReplayDraw={replayDraw}
+                  highlightedParticipantNames={highlightedParticipantNames}
+                  onHighlightedParticipantNamesChange={setHighlightedParticipantNames}
+                />
                 <div className="grid w-full min-w-0 max-w-full items-start gap-5 xl:grid-cols-[minmax(390px,1.15fr)_minmax(0,2.85fr)]">
                   <div className="w-full min-w-0 max-w-full">
-                    <AssignmentTable sweepstake={participant} />
+                    <AssignmentTable sweepstake={participant} highlightedParticipantNames={highlightedParticipantNames} />
                   </div>
                   <div className="w-full min-w-0 max-w-full space-y-5">
-                    <KnockoutBracket sweepstake={participant} />
+                    <KnockoutBracket sweepstake={participant} highlightedParticipantNames={highlightedParticipantNames} />
                   </div>
                 </div>
               </>
@@ -257,7 +290,7 @@ export default function App() {
                       window.history.replaceState({}, "", "/create");
                     }}
                   >
-                    Create a draw?
+                    Create a draw →
                   </button>
                   <button
                     type="button"

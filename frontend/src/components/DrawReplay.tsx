@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import NumberFlow, { NumberFlowGroup } from "@number-flow/react";
 import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight } from "lucide-react";
 import { flagForItem, homeKitForItem } from "../lib/teams";
 import type { Slot, Sweepstake } from "../types";
 import { ShimmeringText } from "./animate-ui/primitives/texts/shimmering";
@@ -17,7 +18,7 @@ const revealSteps = [
 ];
 const revealDuration = revealSteps[revealSteps.length - 1].endTime;
 const lockedMessages = ["Results ready in", "Draw locked", "Reveal pending"];
-const liveDrawDelay = 800;
+const liveDrawDelay = 1000;
 
 type ReplayPhase = "countdown" | "preparing" | "drawing";
 
@@ -25,6 +26,11 @@ type TeamCardStyle = CSSProperties & {
   "--team-primary": string;
   "--team-secondary": string;
   "--team-text": string;
+};
+
+type GroupedAssignments = {
+  groupName: string;
+  slots: Slot[];
 };
 
 function countdownParts(milliseconds: number) {
@@ -94,10 +100,82 @@ function LiveDrawCard({ slot }: { slot: Slot }) {
         <div className="flex size-12 shrink-0 items-center justify-center rounded-md border border-black/10 bg-white/85 text-2xl shadow-sm sm:size-14 sm:text-3xl">
           {flagForItem(item)}
         </div>
-        <div className="min-w-0 flex-1 pr-20">
-          <div className="truncate text-xl font-black leading-tight sm:text-3xl">{slot.name}</div>
-          <div className="mt-1 truncate text-sm font-semibold opacity-90 sm:text-base">{item.name}</div>
+        <div className="min-w-0 flex-1 pr-24">
+          <div title={slot.name} className="truncate text-lg font-black leading-tight sm:text-2xl">
+            {slot.name}
+          </div>
+          <div title={item.name} className="mt-1 truncate text-sm font-semibold opacity-90 sm:text-base">
+            {item.name}
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function groupAssignments(assignments: Slot[]): GroupedAssignments[] {
+  const groups = new Map<string, Slot[]>();
+
+  for (const slot of assignments) {
+    const groupName = slot.assigned_item?.group_name ?? "Other";
+    const slots = groups.get(groupName) ?? [];
+    slots.push(slot);
+    groups.set(groupName, slots);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([groupName, slots]) => ({
+      groupName,
+      slots: slots.sort((a, b) => (a.assigned_item?.name ?? "").localeCompare(b.assigned_item?.name ?? "")),
+    }));
+}
+
+function LiveGroupTeamRow({ slot }: { slot: Slot }) {
+  const item = slot.assigned_item;
+  if (!item) return null;
+
+  const kit = homeKitForItem(item);
+
+  return (
+    <div
+      className="relative flex min-w-0 items-center gap-2 overflow-hidden rounded-md border px-2.5 py-2 text-left shadow-sm"
+      style={{
+        "--team-primary": kit.primary,
+        "--team-secondary": kit.secondary,
+        "--team-text": kit.text,
+        color: "var(--team-text)",
+        background:
+          "linear-gradient(135deg, color-mix(in srgb, var(--team-primary) 92%, black 8%) 0 74%, var(--team-secondary) 74% 100%)",
+      } as TeamCardStyle}
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-transparent to-white/10" />
+      <div className="relative flex size-8 shrink-0 items-center justify-center rounded-md border border-black/10 bg-white/85 text-lg shadow-sm">
+        {flagForItem(item)}
+      </div>
+      <div className="relative min-w-0">
+        <div title={item.name} className="truncate text-sm font-black leading-tight">
+          {item.name}
+        </div>
+        <div title={slot.name} className="truncate text-xs font-semibold opacity-85">
+          {slot.name}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveGroupTable({ group }: { group: GroupedAssignments }) {
+  return (
+    <div className="rounded-md border bg-card p-3 text-left shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-base font-black">Group {group.groupName}</h2>
+        <Badge variant="secondary">{group.slots.length} teams</Badge>
+      </div>
+      <div className="grid gap-2">
+        {group.slots.map((slot) => (
+          <LiveGroupTeamRow key={slot.id} slot={slot} />
+        ))}
       </div>
     </div>
   );
@@ -107,37 +185,76 @@ function LiveDrawReplay({
   sweepstake,
   assignments,
   revealedCount,
+  showGroupTables,
+  isReplay,
   onViewDetails,
 }: {
   sweepstake: Sweepstake;
   assignments: Slot[];
   revealedCount: number;
+  showGroupTables: boolean;
+  isReplay: boolean;
   onViewDetails: () => void;
 }) {
+  const groups = useMemo(() => groupAssignments(assignments), [assignments]);
+  const heading = showGroupTables ? "Groups formed" : isReplay ? "Draw replay" : "Live draw";
+  const actionLabel = showGroupTables ? "Go to standings" : isReplay ? "Skip replay" : "Skip live draw";
+
   return (
     <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center">
       <Card className="w-full max-w-4xl overflow-hidden">
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <Badge variant="secondary">{sweepstake.title}</Badge>
-              <h1 className="mt-4 text-3xl font-black tracking-normal sm:text-5xl">Live draw</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{sweepstake.title}</Badge>
+                {isReplay ? <Badge>Replay</Badge> : null}
+              </div>
+              <h1 className="mt-4 text-3xl font-black tracking-normal sm:text-5xl">{heading}</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                {Math.min(revealedCount, assignments.length)} of {assignments.length} revealed
+                {showGroupTables
+                  ? `${groups.length} group tables ready`
+                  : `${Math.min(revealedCount, assignments.length)} of ${assignments.length} revealed`}
               </p>
             </div>
-            <Button type="button" variant="link" className="px-0 text-muted-foreground hover:text-foreground" onClick={onViewDetails}>
-              View draw details
+            <Button type="button" variant="link" className="gap-1 px-0 text-muted-foreground hover:text-foreground" onClick={onViewDetails}>
+              {actionLabel}
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
 
           <div className="relative mt-5 overflow-hidden">
             <div className="h-[min(68vh,720px)] overflow-y-auto pr-1 [mask-image:linear-gradient(to_bottom,black_0%,black_72%,rgba(0,0,0,0.55)_86%,transparent_100%)] [mask-size:100%_100%]">
-              <AnimatedList delay={liveDrawDelay} className="gap-3 pb-16">
-                {assignments.map((slot) => (
-                  <LiveDrawCard key={slot.id} slot={slot} />
-                ))}
-              </AnimatedList>
+              <AnimatePresence mode="wait">
+                {showGroupTables ? (
+                  <motion.div
+                    key="groups"
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -18 }}
+                    transition={{ duration: 0.32, ease: "easeOut" }}
+                    className="grid gap-3 pb-16 md:grid-cols-2 xl:grid-cols-3"
+                  >
+                    {groups.map((group) => (
+                      <LiveGroupTable key={group.groupName} group={group} />
+                    ))}
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="assignments"
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -18 }}
+                    transition={{ duration: 0.32, ease: "easeOut" }}
+                  >
+                    <AnimatedList delay={liveDrawDelay} className="gap-3 pb-16">
+                      {assignments.map((slot) => (
+                        <LiveDrawCard key={slot.id} slot={slot} />
+                      ))}
+                    </AnimatedList>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </CardContent>
@@ -158,6 +275,7 @@ export function DrawReplay({
   startInReplay?: boolean;
 }) {
   const revealAt = useMemo(() => new Date(sweepstake.reveal_at).getTime(), [sweepstake.reveal_at]);
+  const isReplay = startInReplay || sweepstake.is_revealed;
   const [replaySweepstake, setReplaySweepstake] = useState(sweepstake);
   const assignments = useMemo(() => replaySweepstake.slots.filter((slot) => slot.paid && slot.assigned_item), [replaySweepstake.slots]);
   const [now, setNow] = useState(Date.now());
@@ -171,6 +289,7 @@ export function DrawReplay({
     return revealAt - Date.now() <= 0 ? "preparing" : "countdown";
   });
   const [revealedCount, setRevealedCount] = useState(0);
+  const [showGroupTables, setShowGroupTables] = useState(false);
   const completedRef = useRef(false);
 
   const finishReveal = useCallback(() => {
@@ -247,6 +366,7 @@ export function DrawReplay({
       return;
     }
 
+    setShowGroupTables(false);
     setRevealedCount(1);
     const countInterval = window.setInterval(() => {
       setRevealedCount((count) => Math.min(assignments.length, count + 1));
@@ -256,6 +376,15 @@ export function DrawReplay({
       window.clearInterval(countInterval);
     };
   }, [assignments.length, phase]);
+
+  useEffect(() => {
+    if (phase !== "drawing" || assignments.length === 0 || revealedCount < assignments.length) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setShowGroupTables(true), 1_200);
+    return () => window.clearTimeout(timeout);
+  }, [assignments.length, phase, revealedCount]);
 
   if (sweepstake.draw_status === "draft") {
     return (
@@ -274,7 +403,16 @@ export function DrawReplay({
   }
 
   if (phase === "drawing") {
-    return <LiveDrawReplay sweepstake={replaySweepstake} assignments={assignments} revealedCount={revealedCount} onViewDetails={finishReveal} />;
+    return (
+      <LiveDrawReplay
+        sweepstake={replaySweepstake}
+        assignments={assignments}
+        revealedCount={revealedCount}
+        showGroupTables={showGroupTables}
+        isReplay={isReplay}
+        onViewDetails={finishReveal}
+      />
+    );
   }
 
   return (
